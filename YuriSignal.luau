@@ -64,7 +64,7 @@ export type YuriSignal<T...> = {
 	connect: (signal: YuriSignal<T...>, callback: (T...) -> ()) -> (YuriConnection<T...>),
 	once: (signal: YuriSignal<T...>, callback: (T...) -> ()) -> (YuriConnection<T...>),
 	limit: (signal: YuriSignal<T...>, amount: number, callback: (T...) -> ()) -> (YuriConnection<T...>),
-	each: (signal: YuriSignal<T...>, evaluationFunction: () -> (boolean), callback: (T...) -> ()) -> (YuriConnection<T...>),
+	each: (signal: YuriSignal<T...>, evaluationFunction: (T...) -> (boolean), callback: (T...) -> ()) -> (YuriConnection<T...>),
 	after: (signal: YuriSignal<T...>, disconnectAfterSeconds: number, callback: (T...) -> ()) -> (YuriConnection<T...>),
 	wait: (signal: YuriSignal<T...>) -> (T...),
 	waitUntil: (signal: YuriSignal<T...>, timeOut: number) -> (T...),
@@ -89,8 +89,8 @@ type privateYuriConnection<T...> = YuriConnection<T...> & {
 	previous: privateYuriConnection<T...>?,
 	signal: privateYuriSignal<T...>,
 	disconnectAfter: number?,
-	callback: (T...) -> (),
-	eval: () -> ()?
+	callback: (T...) -> (),	
+	eval: ((T...) -> (boolean))?
 }
 
 local function disconnect<T...>(connection: privateYuriConnection<T...>)
@@ -127,8 +127,9 @@ local function connect<T...>(signal: privateYuriSignal<T...>, callback: (T...) -
 		connected = true,
 		signal = signal,
 		next = signal.tail,
-		callback = callback
-	}
+		callback = callback,
+		eval = nil
+	} 
 	
 	if signal.tail then
 		signal.tail.previous = connection
@@ -154,7 +155,7 @@ local function once<T...>(signal: privateYuriSignal<T...>, callback: (T...) -> (
 end
 
 
-local function each<T...>(signal: privateYuriSignal<T...>, evaluationFunction: () -> (boolean), callback: (T...) -> ()): (privateYuriConnection<T...>)
+local function each<T...>(signal: privateYuriSignal<T...>, evaluationFunction: (T...) -> (boolean), callback: (T...) -> ()): (privateYuriConnection<T...>)
 	local connection = connect(signal, callback)
 
 	connection.eval = evaluationFunction
@@ -170,7 +171,7 @@ local function after<T...>(signal: privateYuriSignal<T...>, disconnectAfterSecon
 	return connection
 end
 
-local function wait<T...> (signal: privateYuriSignal<T...>): (T...)
+local function wait<T...>(signal: privateYuriSignal<T...>): (T...)
 	local t = coroutine.running()
 	
 	once(signal, function(...) 
@@ -208,7 +209,7 @@ local function fire<T...>(signal: privateYuriSignal<T...>, ...: T...): ()
 		
 		task.spawn(connection.callback, ...)
 		
-		if connection.eval and connection.eval() then
+		if connection.eval and connection.eval(...) then
 			local con = connection
 			connection = connection.next
 			con:disconnect()
